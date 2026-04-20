@@ -1,85 +1,90 @@
 import os
-import json
+import requests
 import time
 import threading
-import datetime
-import requests
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, render_template_string
 
 app = Flask(__name__)
 
-CONFIG = {
-    "app_key": os.environ.get("BETFAIR_APP_KEY", ""),
-    "username": os.environ.get("BETFAIR_USERNAME", ""),
-    "password": os.environ.get("BETFAIR_PASSWORD", ""),
-    "stake": float(os.environ.get("STAKE", "50")),
-    "min_odd": float(os.environ.get("MIN_ODD", "1.5")),
-    "max_odd": float(os.environ.get("MAX_ODD", "4.0")),
-    "delay_threshold": float(os.environ.get("DELAY_THRESHOLD", "4")),
-    "check_interval": float(os.environ.get("CHECK_INTERVAL", "1.5")),
-    "dry_run": os.environ.get("DRY_RUN", "true").lower() == "true",
-}
-
-BETFAIR_LOGIN_URL = "https://identitysso-cert.betfair.com/api/login"
-BETTING_API = "https://api.betfair.com/exchange/betting/json-rpc/v1"
+API_KEY = os.environ.get("ODDS_API_KEY")
 
 state = {
     "running": False,
-    "session_token": None,
-    "headers": {},
-    "balance": 0.0,
-    "markets": [],
-    "monitored": {},
-    "bets": [],
-    "log": [],
-    "opportunities": 0,
+    "games": [],
+    "alerts": []
 }
 
-def add_log(msg, level="INFO"):
-    entry = {
-        "time": datetime.datetime.now().strftime("%H:%M:%S"),
-        "level": level,
-        "msg": msg
-    }
-    state["log"].insert(0, entry)
-    print(f"[{entry['time']}] [{level}] {msg}")
+def add_alert(msg):
+    state["alerts"].insert(0, msg)
+    print(msg)
 
-def login():
-    add_log("Autenticando...")
-    if not CONFIG["app_key"]:
-        add_log("Configure variáveis no Railway", "ERROR")
-        return False
-    return True
+def get_odds():
+    url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey={API_KEY}&regions=eu&markets=h2h"
+    try:
+        r = requests.get(url)
+        return r.json()
+    except:
+        return []
+
+def check_arbitrage(game):
+    odds = []
+    for book in game.get("bookmakers", []):
+        for market in book.get("markets", []):
+            for outcome in market.get("outcomes", []):
+                odds.append(outcome["price"])
+
+    if len(odds) >= 2:
+        inv = sum(1/o for o in odds[:2])
+        if inv < 1:
+            add_alert(f"🚨 ARBITRAGEM: {game['home_team']} x {game['away_team']}")
 
 def bot_loop():
-    add_log("Bot iniciado")
     while state["running"]:
-        time.sleep(2)
+        games = get_odds()
+        state["games"] = games
+
+        for g in games:
+            check_arbitrage(g)
+
+        time.sleep(10)
 
 HTML = """
-<h1>Bot rodando</h1>
+<h2>Bot de Alertas</h2>
+<button onclick="start()">Start</button>
+<button onclick="stop()">Stop</button>
+<div id="alerts"></div>
+
+<script>
+function start(){fetch('/start',{method:'POST'})}
+function stop(){fetch('/stop',{method:'POST'})}
+
+setInterval(()=>{
+ fetch('/status').then(r=>r.json()).then(d=>{
+  document.getElementById('alerts').innerHTML = d.alerts.join('<br>')
+ })
+},2000)
+</script>
 """
 
 @app.route("/")
 def index():
     return render_template_string(HTML)
 
-@app.route("/api/start", methods=["POST"])
+@app.route("/start", methods=["POST"])
 def start():
     state["running"] = True
     threading.Thread(target=bot_loop, daemon=True).start()
     return jsonify({"ok": True})
 
-@app.route("/api/stop", methods=["POST"])
+@app.route("/stop", methods=["POST"])
 def stop():
     state["running"] = False
     return jsonify({"ok": True})
 
-@app.route("/api/status")
+@app.route("/status")
 def status():
-    return jsonify({"running": state["running"]})
+    return jsonify(state)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    add_log("Servidor iniciado")
     app.run(host="0.0.0.0", port=port)
