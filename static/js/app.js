@@ -13,8 +13,12 @@ function atualizarStatus() {
                 data.alertas.forEach(alerta => {
                     html += `
                     <div class="alert alert-${alerta.tipo === 'arb' ? 'success' : 'warning'}">
-                        <strong>${alerta.tipo.toUpperCase()}</strong><br>
-                        ${alerta.mensagem}<br>
+                        <strong>${alerta.tipo.toUpperCase()}</strong> - ${alerta.esporte}<br>
+                        ${alerta.jogo} (${alerta.liga})<br>
+                        Margem: ${alerta.margem.toFixed(2)}% | Lucro: R$ ${alerta.lucro.toFixed(2)}<br>
+                        ${alerta.casa1} @ ${alerta.odd1} vs ${alerta.casa2} @ ${alerta.odd2}<br>
+                        ${alerta.link1 ? '<a href="' + alerta.link1 + '" target="_blank" class="btn btn-xs btn-primary">' + alerta.casa1 + '</a>' : ''}
+                        ${alerta.link2 ? '<a href="' + alerta.link2 + '" target="_blank" class="btn btn-xs btn-primary">' + alerta.casa2 + '</a>' : ''}
                         <small>${alerta.data}</small>
                     </div>`;
                 });
