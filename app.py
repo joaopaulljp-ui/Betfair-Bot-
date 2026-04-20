@@ -16,10 +16,19 @@ BANKROLL = float(os.environ.get("BANKROLL", "200"))
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 
+# Casas que o usuário consegue operar no Brasil
+BR_BOOKMAKERS = [
+    "Betano",
+    "Superbet",
+    "Sportingbet",
+    "KTO",
+    "Novibet"
+]
+
 state = {
     "running": False,
     "alerts": [],
-    "stats": {"arb": 0, "value": 0, "card": 0},
+    "stats": {"arb": 0},
     "scan_count": 0,
     "last_scan": "—",
     "games_live": 0,
@@ -43,7 +52,7 @@ def send_telegram(msg):
         pass
 
 # =========================
-# ALERTS
+# ALERTAS
 # =========================
 def add_alert(tipo, msg, key=None):
     now = time.time()
@@ -60,11 +69,11 @@ def add_alert(tipo, msg, key=None):
         "time": datetime.datetime.now().strftime("%H:%M:%S")
     })
 
-    state["stats"][tipo] += 1
+    state["stats"][tipo] = state["stats"].get(tipo, 0) + 1
     send_telegram(msg)
 
 # =========================
-# ODDS API
+# API
 # =========================
 def get_games():
     if not ODDS_API_KEY:
@@ -73,29 +82,58 @@ def get_games():
     try:
         url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey={ODDS_API_KEY}&regions=eu&markets=h2h"
         r = requests.get(url, timeout=10)
-        return r.json() if isinstance(r.json(), list) else []
+        data = r.json()
+        return data if isinstance(data, list) else []
     except:
         return []
 
 # =========================
-# ARBITRAGEM SIMPLES
+# FILTRAR CASAS BR
 # =========================
-def check_arbitrage(game):
-    best = {}
+def filter_br_books(game):
+    result = {}
 
     for book in game.get("bookmakers", []):
+        name = book.get("title", "")
+
+        # só marca se for casa BR
+        is_br = any(b.lower() in name.lower() for b in BR_BOOKMAKERS)
+
+        if not is_br:
+            continue
+
         for market in book.get("markets", []):
+            if market.get("key") != "h2h":
+                continue
+
             for outcome in market.get("outcomes", []):
-                name = outcome["name"]
-                price = float(outcome["price"])
+                o = outcome["name"]
+                p = float(outcome["price"])
 
-                if name not in best or price > best[name]["price"]:
-                    best[name] = {"price": price, "book": book["title"]}
+                if o not in result:
+                    result[o] = {}
 
-    if len(best) < 2:
+                result[o][name] = p
+
+    return result
+
+# =========================
+# ARBITRAGEM (APENAS BR)
+# =========================
+def check_arbitrage(game):
+    br = filter_br_books(game)
+
+    if len(br) < 2:
         return
 
-    odds = [v["price"] for v in best.values()]
+    best = {}
+
+    for outcome, books in br.items():
+        if books:
+            best_book = max(books, key=books.get)
+            best[outcome] = books[best_book]
+
+    odds = list(best.values())
     inv = sum(1 / o for o in odds)
 
     if inv >= 1:
@@ -104,7 +142,7 @@ def check_arbitrage(game):
     margin = (1 - inv) * 100
 
     msg = (
-        f"🚨 ARBITRAGEM\n"
+        f"🚨 ARBITRAGEM BR\n"
         f"{game.get('home_team')} x {game.get('away_team')}\n"
         f"Margem: {margin:.2f}%"
     )
@@ -115,7 +153,7 @@ def check_arbitrage(game):
 # LOOP
 # =========================
 def bot_loop():
-    send_telegram("🤖 BOT ONLINE")
+    send_telegram("🤖 BOT PRO ATIVO")
 
     while state["running"]:
         games = get_games()
@@ -130,60 +168,50 @@ def bot_loop():
         time.sleep(10)
 
 # =========================
-# FRONTEND COMPLETO
+# FRONTEND SIMPLES
 # =========================
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>BOT PRO</title>
+<title>BOT PRO BR</title>
 <style>
-body { font-family: Arial; background:#0f1115; color:white; text-align:center; }
-button { padding:10px 20px; margin:10px; cursor:pointer; }
-.card { background:#1c1f26; padding:10px; margin:10px; border-radius:10px; }
+body { font-family: Arial; background:#111; color:white; text-align:center; }
+button { padding:10px; margin:5px; }
+.card { background:#222; margin:10px; padding:10px; border-radius:8px; }
 </style>
 </head>
-
 <body>
 
-<h1>⚡ BOT PRO ARBITRAGEM</h1>
+<h2>⚡ BOT PRO ARBITRAGEM BR</h2>
 
 <button onclick="start()">START</button>
 <button onclick="stop()">STOP</button>
 
-<p id="status">Status: —</p>
+<p id="status"></p>
 
-<h3>Alertas</h3>
 <div id="alerts"></div>
 
 <script>
-function start(){
-  fetch('/start',{method:'POST'})
-}
-
-function stop(){
-  fetch('/stop',{method:'POST'})
-}
+function start(){ fetch('/start',{method:'POST'}) }
+function stop(){ fetch('/stop',{method:'POST'}) }
 
 setInterval(()=>{
-  fetch('/status')
-  .then(r=>r.json())
-  .then(d=>{
-    document.getElementById('status').innerText =
-      "Rodando: " + d.running + " | Jogos: " + d.games_live
+ fetch('/status')
+ .then(r=>r.json())
+ .then(d=>{
+   document.getElementById('status').innerText =
+   `Rodando: ${d.running} | Jogos: ${d.games_live}`
 
-    let html = ""
-    d.alerts.forEach(a=>{
-      html += `<div class="card">
-        <b>${a.tipo.toUpperCase()}</b><br>
-        ${a.msg}<br>
-        <small>${a.time}</small>
-      </div>`
-    })
+   let html = ""
+   d.alerts.forEach(a=>{
+     html += `<div class='card'>
+       <b>${a.tipo}</b><br>${a.msg}<br>${a.time}
+     </div>`
+   })
 
-    document.getElementById('alerts').innerHTML = html
-  })
+   document.getElementById('alerts').innerHTML = html
+ })
 },2000)
 </script>
 
@@ -215,7 +243,7 @@ def status():
     return jsonify(state)
 
 # =========================
-# START
+# RUN
 # =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
