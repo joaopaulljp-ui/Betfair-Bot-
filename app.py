@@ -3,11 +3,11 @@ import time
 import threading
 import datetime
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template
 import requests
 
 from config import Config
-from database import db, Alert, Arbitrage, Statistics
+from database import db, Alert, Arbitrage
 from arbitrage.detector import ArbitrageDetector
 from arbitrage.calculator import OddsCalculator
 
@@ -35,27 +35,41 @@ def get_games_api():
         print("❌ SEM API KEY")
         return []
     
-    url = f"https://api.the-odds-api.com/v4/sports/soccer_brazil/odds/"
-    params = {
-        "apiKey": Config.ODDS_API_KEY,
-        "regions": "br",
-        "markets": "h2h"
-    }
+    todos_jogos = []
     
-    try:
-        r = requests.get(url, params=params, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
+    esportes = [
+        "soccer",
+        "basketball",
+        "americanfootball",
+        "baseball",
+        "ice_hockey",
+        "tennis"
+    ]
+    
+    for esporte in esportes:
+        try:
+            url = f"https://api.the-odds-api.com/v4/sports/{esporte}/odds/"
+            params = {
+                "apiKey": Config.ODDS_API_KEY,
+                "regions": "br",
+                "markets": "h2h"
+            }
             
-            if isinstance(data, list):
-                return data
-            elif isinstance(data, dict) and "data" in data:
-                return data["data"]
+            r = requests.get(url, params=params, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                
+                if isinstance(data, list):
+                    todos_jogos.extend(data)
+                    print(f"✅ {esporte}: {len(data)} jogos")
+                elif isinstance(data, dict) and "data" in data:
+                    todos_jogos.extend(data["data"])
+                    print(f"✅ {esporte}: {len(data['data'])} jogos")
         
-        return []
-    except Exception as e:
-        print(f"❌ ERRO NA API: {e}")
-        return []
+        except Exception as e:
+            print(f"⚠️ Erro ao buscar {esporte}: {e}")
+    
+    return todos_jogos
 
 def bot_loop():
     print("🚀 BOT INICIADO")
@@ -67,7 +81,7 @@ def bot_loop():
             state["games_live"] = len(jogos)
             state["last_scan"] = datetime.datetime.now().strftime("%H:%M:%S")
             
-            print(f"📊 {len(jogos)} jogos recebidos - {state['last_scan']}")
+            print(f"📊 Total de {len(jogos)} jogos - {state['last_scan']}")
             
             for jogo in jogos:
                 resultado = ArbitrageDetector.processar_jogo(jogo)
@@ -114,13 +128,13 @@ def api_stop():
 @app.route("/api/alertas")
 def api_alertas():
     with app.app_context():
-        alertas = Alert.query.order_by(Alert.data_criacao.desc()).limit(50).all()
+        alertas = Alert.query.order_by(Alert.data_criacao.desc()).limit(100).all()
         return jsonify([a.to_dict() for a in alertas])
 
 @app.route("/api/arbitragens")
 def api_arbitragens():
     with app.app_context():
-        arbs = Arbitrage.query.order_by(Arbitrage.data_deteccao.desc()).limit(50).all()
+        arbs = Arbitrage.query.order_by(Arbitrage.data_deteccao.desc()).limit(100).all()
         return jsonify([a.to_dict() for a in arbs])
 
 @app.route("/api/stats")
