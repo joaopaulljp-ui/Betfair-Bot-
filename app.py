@@ -7,10 +7,10 @@ from flask import Flask, jsonify, render_template_string
 app = Flask(__name__)
 
 API_KEY = os.environ.get("ODDS_API_KEY")
+BANKROLL = float(os.environ.get("BANKROLL", 100))
 
 state = {
     "running": False,
-    "games": [],
     "alerts": [],
     "history": {},
     "last_alerts": {}
@@ -19,7 +19,6 @@ state = {
 def add_alert(msg, key=None):
     now = time.time()
 
-    # evita repetição
     if key:
         last = state["last_alerts"].get(key, 0)
         if now - last < 60:
@@ -40,7 +39,6 @@ def get_book_link(book):
         "Bet365": "https://www.bet365.com",
         "Pinnacle": "https://www.pinnacle.com",
         "Coolbet": "https://www.coolbet.com",
-        "William Hill": "https://www.williamhill.com",
     }
     return links.get(book, "https://www.google.com")
 
@@ -50,13 +48,20 @@ def get_book_link(book):
 def get_odds():
     url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey={API_KEY}&regions=eu&markets=h2h"
     try:
-        r = requests.get(url, timeout=10)
-        return r.json()
+        return requests.get(url, timeout=10).json()
     except:
         return []
 
 # ------------------------
-# ARBITRAGEM
+# CÁLCULO DE STAKE
+# ------------------------
+def calculate_stakes(odds):
+    inv_sum = sum(1/o for o in odds)
+    stakes = [(BANKROLL / o) / inv_sum for o in odds]
+    return stakes
+
+# ------------------------
+# ARBITRAGEM PRO
 # ------------------------
 def check_arbitrage(game):
     best = {}
@@ -78,70 +83,72 @@ def check_arbitrage(game):
     if len(best) < 2:
         return
 
-    inv = sum(1/v["price"] for v in best.values())
+    odds = [v["price"] for v in best.values()]
+    inv = sum(1/o for o in odds)
 
-    if inv < 0.98:
+    if inv < 1:
         margem = (1 - inv) * 100
+        stakes = calculate_stakes(odds)
 
-        detalhes = "\n".join([
-            f"{k}: {v['price']} ({v['book']})\n👉 {get_book_link(v['book'])}"
-            for k, v in best.items()
-        ])
+        detalhes = ""
+        for (name, data), stake in zip(best.items(), stakes):
+            detalhes += (
+                f"{name}: {data['price']} ({data['book']})\n"
+                f"👉 {get_book_link(data['book'])}\n"
+                f"💰 Apostar: R${stake:.2f}\n\n"
+            )
+
+        lucro = min([stake * odd for stake, odd in zip(stakes, odds)]) - sum(stakes)
 
         key = f"arb_{game['id']}"
 
         add_alert(
-            f"🚨 ARBITRAGEM\n\n"
+            f"🚨 ARBITRAGEM REAL\n\n"
             f"{game['home_team']} x {game['away_team']}\n\n"
-            f"{detalhes}\n\n"
-            f"Margem: {margem:.2f}%",
+            f"{detalhes}"
+            f"💵 Lucro estimado: R${lucro:.2f}\n"
+            f"📊 Margem: {margem:.2f}%",
             key
         )
 
 # ------------------------
-# VARIAÇÃO DE ODDS
+# VARIAÇÃO
 # ------------------------
 def detect_movement(game):
-    game_id = game["id"]
+    gid = game["id"]
+    odds = []
 
-    current_odds = []
+    for b in game.get("bookmakers", []):
+        for m in b.get("markets", []):
+            for o in m.get("outcomes", []):
+                odds.append(o["price"])
 
-    for book in game.get("bookmakers", []):
-        for market in book.get("markets", []):
-            for outcome in market.get("outcomes", []):
-                current_odds.append(outcome["price"])
-
-    if not current_odds:
+    if not odds:
         return
 
-    avg_now = sum(current_odds) / len(current_odds)
+    avg = sum(odds) / len(odds)
 
-    if game_id not in state["history"]:
-        state["history"][game_id] = avg_now
+    if gid not in state["history"]:
+        state["history"][gid] = avg
         return
 
-    old = state["history"][game_id]
-    change = ((avg_now - old) / old) * 100
+    old = state["history"][gid]
+    change = ((avg - old) / old) * 100
 
     if abs(change) > 10:
-        key = f"mov_{game_id}"
-
         add_alert(
-            f"⚡ VARIAÇÃO FORTE\n\n"
-            f"{game['home_team']} x {game['away_team']}\n"
-            f"Variação: {change:.1f}%",
-            key
+            f"⚡ VARIAÇÃO FORTE\n{game['home_team']} x {game['away_team']}\n{change:.1f}%",
+            f"mov_{gid}"
         )
 
-    state["history"][game_id] = avg_now
+    state["history"][gid] = avg
 
 # ------------------------
-# LOOP PRINCIPAL
+# LOOP
 # ------------------------
 def bot_loop():
     while state["running"]:
         games = get_odds()
-        state["games"] = games
 
         for g in games:
             check_arbitrage(g)
@@ -150,10 +157,10 @@ def bot_loop():
         time.sleep(10)
 
 # ------------------------
-# INTERFACE
+# FRONT
 # ------------------------
 HTML = """
-<h2>Bot de Alertas PRO</h2>
+<h2>Bot PRO Arbitragem</h2>
 <button onclick="start()">Start</button>
 <button onclick="stop()">Stop</button>
 <div id="alerts" style="white-space: pre-line;"></div>
@@ -161,17 +168,16 @@ HTML = """
 <script>
 function start(){fetch('/start',{method:'POST'})}
 function stop(){fetch('/stop',{method:'POST'})}
-
 setInterval(()=>{
  fetch('/status').then(r=>r.json()).then(d=>{
-  document.getElementById('alerts').innerHTML = d.alerts.join('\\n\\n-----------------------\\n\\n')
+  document.getElementById('alerts').innerHTML = d.alerts.join('\\n\\n----------------\\n\\n')
  })
 },2000)
 </script>
 """
 
 @app.route("/")
-def index():
+def home():
     return render_template_string(HTML)
 
 @app.route("/start", methods=["POST"])
@@ -191,6 +197,4 @@ def status():
     return jsonify(state)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    print("🚀 Bot rodando...")
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
