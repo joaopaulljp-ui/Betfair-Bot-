@@ -3,16 +3,21 @@
 {% block title %}Alertas - Betfair Bot{% endblock %}
 
 {% block content %}
-<h2>🔔 Todos os Alertas</h2>
+<h2>🔔 Todas as Arbitragens Detectadas</h2>
 
 <div class="table-responsive">
-    <table class="table table-dark table-hover">
+    <table class="table table-dark table-hover table-sm">
         <thead>
             <tr>
                 <th>Tipo</th>
+                <th>Esporte</th>
                 <th>Jogo</th>
+                <th>Liga</th>
                 <th>Margem</th>
-                <th>Mensagem</th>
+                <th>Lucro</th>
+                <th>Casa 1</th>
+                <th>Casa 2</th>
+                <th>Links</th>
                 <th>Data</th>
             </tr>
         </thead>
@@ -20,13 +25,41 @@
             {% for alerta in alertas %}
             <tr>
                 <td><span class="badge bg-success">{{ alerta.tipo.upper() }}</span></td>
-                <td>{{ alerta.jogo }}</td>
-                <td>{{ "%.2f"|format(alerta.margem or 0) }}%</td>
-                <td>{{ alerta.mensagem[:50] }}...</td>
-                <td>{{ alerta.data_criacao.strftime("%d/%m/%Y %H:%M") }}</td>
+                <td>{{ alerta.esporte }}</td>
+                <td><strong>{{ alerta.jogo }}</strong></td>
+                <td>{{ alerta.liga }}</td>
+                <td><span class="badge bg-info">{{ "%.2f"|format(alerta.margem or 0) }}%</span></td>
+                <td><span class="badge bg-success">R$ {{ "%.2f"|format(alerta.lucro_potencial or 0) }}</span></td>
+                <td>
+                    <strong>{{ alerta.casa1 }}</strong><br>
+                    {{ alerta.resultado1 }}<br>
+                    <small>{{ "%.2f"|format(alerta.odd1 or 0) }}</small>
+                </td>
+                <td>
+                    <strong>{{ alerta.casa2 }}</strong><br>
+                    {{ alerta.resultado2 }}<br>
+                    <small>{{ "%.2f"|format(alerta.odd2 or 0) }}</small>
+                </td>
+                <td>
+                    {% if alerta.link1 %}
+                        <a href="{{ alerta.link1 }}" target="_blank" class="btn btn-xs btn-primary">{{ alerta.casa1 }}</a>
+                    {% endif %}
+                    {% if alerta.link2 %}
+                        <a href="{{ alerta.link2 }}" target="_blank" class="btn btn-xs btn-primary">{{ alerta.casa2 }}</a>
+                    {% endif %}
+                </td>
+                <td>{{ alerta.data }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+
+{% if not alertas %}
+<div class="alert alert-info">
+    <strong>📭 Nenhuma arbitragem detectada ainda.</strong><br>
+    O bot está monitorando todos os esportes e casas de apostas do Brasil!
+</div>
+{% endif %}
+
 {% endblock %}
