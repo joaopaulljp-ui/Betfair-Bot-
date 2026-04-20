@@ -32,6 +32,19 @@ def add_alert(msg, key=None):
         state["alerts"].pop()
 
 # ------------------------
+# LINKS DAS CASAS
+# ------------------------
+def get_book_link(book):
+    links = {
+        "Betfair": "https://www.betfair.com/exchange/plus/",
+        "Bet365": "https://www.bet365.com",
+        "Pinnacle": "https://www.pinnacle.com",
+        "Coolbet": "https://www.coolbet.com",
+        "William Hill": "https://www.williamhill.com",
+    }
+    return links.get(book, "https://www.google.com")
+
+# ------------------------
 # API ODDS
 # ------------------------
 def get_odds():
@@ -71,7 +84,7 @@ def check_arbitrage(game):
         margem = (1 - inv) * 100
 
         detalhes = "\n".join([
-            f"{k}: {v['price']} ({v['book']})"
+            f"{k}: {v['price']} ({v['book']})\n👉 {get_book_link(v['book'])}"
             for k, v in best.items()
         ])
 
