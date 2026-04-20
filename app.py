@@ -16,15 +16,6 @@ BANKROLL = float(os.environ.get("BANKROLL", "200"))
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-# Casas que o usuário consegue operar no Brasil
-BR_BOOKMAKERS = [
-    "Betano",
-    "Superbet",
-    "Sportingbet",
-    "KTO",
-    "Novibet"
-]
-
 state = {
     "running": False,
     "alerts": [],
@@ -48,8 +39,8 @@ def send_telegram(msg):
             json={"chat_id": TG_CHAT, "text": msg},
             timeout=6
         )
-    except:
-        pass
+    except Exception as e:
+        print("TG ERROR:", e)
 
 # =========================
 # ALERTAS
@@ -73,87 +64,99 @@ def add_alert(tipo, msg, key=None):
     send_telegram(msg)
 
 # =========================
-# API
+# API (CORRIGIDA DEFINITIVA)
 # =========================
 def get_games():
     if not ODDS_API_KEY:
+        print("❌ SEM API KEY")
         return []
+
+    url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey={ODDS_API_KEY}&regions=eu,us&markets=h2h"
 
     try:
-        url = f"https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey={ODDS_API_KEY}&regions=eu&markets=h2h"
         r = requests.get(url, timeout=10)
         data = r.json()
-        return data if isinstance(data, list) else []
-    except:
+
+        # 🔍 DEBUG IMPORTANTE
+        print("=== API DEBUG ===")
+        print("TYPE:", type(data))
+        print("SAMPLE:", str(data)[:300])
+
+        # ✔ CASO 1: lista direta (normal)
+        if isinstance(data, list):
+            return data
+
+        # ✔ CASO 2: dict com lista dentro
+        if isinstance(data, dict):
+            for key in ["data", "results", "response"]:
+                if key in data and isinstance(data[key], list):
+                    return data[key]
+
+        # ✔ CASO 3: erro da API
+        if isinstance(data, dict) and "error_code" in data:
+            print("❌ API ERROR:", data)
+            return []
+
+        return []
+
+    except Exception as e:
+        print("❌ REQUEST ERROR:", e)
         return []
 
 # =========================
-# FILTRAR CASAS BR
-# =========================
-def filter_br_books(game):
-    result = {}
-
-    for book in game.get("bookmakers", []):
-        name = book.get("title", "")
-
-        # só marca se for casa BR
-        is_br = any(b.lower() in name.lower() for b in BR_BOOKMAKERS)
-
-        if not is_br:
-            continue
-
-        for market in book.get("markets", []):
-            if market.get("key") != "h2h":
-                continue
-
-            for outcome in market.get("outcomes", []):
-                o = outcome["name"]
-                p = float(outcome["price"])
-
-                if o not in result:
-                    result[o] = {}
-
-                result[o][name] = p
-
-    return result
-
-# =========================
-# ARBITRAGEM (APENAS BR)
+# ARBITRAGEM SIMPLES
 # =========================
 def check_arbitrage(game):
-    br = filter_br_books(game)
+    try:
+        books = {}
 
-    if len(br) < 2:
-        return
+        for b in game.get("bookmakers", []):
+            name = b.get("title", "")
 
-    best = {}
+            for m in b.get("markets", []):
+                if m.get("key") != "h2h":
+                    continue
 
-    for outcome, books in br.items():
-        if books:
-            best_book = max(books, key=books.get)
-            best[outcome] = books[best_book]
+                for o in m.get("outcomes", []):
+                    outcome = o["name"]
+                    price = float(o["price"])
 
-    odds = list(best.values())
-    inv = sum(1 / o for o in odds)
+                    if outcome not in books:
+                        books[outcome] = {}
 
-    if inv >= 1:
-        return
+                    books[outcome][name] = price
 
-    margin = (1 - inv) * 100
+        if len(books) < 2:
+            return
 
-    msg = (
-        f"🚨 ARBITRAGEM BR\n"
-        f"{game.get('home_team')} x {game.get('away_team')}\n"
-        f"Margem: {margin:.2f}%"
-    )
+        best = {}
+        for outcome, bks in books.items():
+            best[outcome] = max(bks.values())
 
-    add_alert("arb", msg, key=f"arb_{game.get('id')}")
+        odds = list(best.values())
+        inv = sum(1 / o for o in odds)
+
+        if inv >= 1:
+            return
+
+        margin = (1 - inv) * 100
+
+        msg = (
+            f"🚨 ARBITRAGEM\n"
+            f"{game.get('home_team')} x {game.get('away_team')}\n"
+            f"Margem: {margin:.2f}%"
+        )
+
+        add_alert("arb", msg, key=game.get("id"))
+
+    except Exception as e:
+        print("ARB ERROR:", e)
 
 # =========================
 # LOOP
 # =========================
 def bot_loop():
-    send_telegram("🤖 BOT PRO ATIVO")
+    print("BOT INICIADO")
 
     while state["running"]:
         games = get_games()
@@ -161,6 +164,8 @@ def bot_loop():
         state["games_live"] = len(games)
         state["scan_count"] += 1
         state["last_scan"] = datetime.datetime.now().strftime("%H:%M:%S")
+
+        print(f"📊 Jogos recebidos: {len(games)}")
 
         for g in games:
             check_arbitrage(g)
@@ -174,16 +179,16 @@ HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>BOT PRO BR</title>
+<title>BOT PRO</title>
 <style>
-body { font-family: Arial; background:#111; color:white; text-align:center; }
-button { padding:10px; margin:5px; }
-.card { background:#222; margin:10px; padding:10px; border-radius:8px; }
+body{font-family:Arial;background:#111;color:#fff;text-align:center}
+button{padding:10px;margin:5px}
+.card{background:#222;margin:10px;padding:10px;border-radius:8px}
 </style>
 </head>
 <body>
 
-<h2>⚡ BOT PRO ARBITRAGEM BR</h2>
+<h2>⚡ BOT PRO ARBITRAGEM</h2>
 
 <button onclick="start()">START</button>
 <button onclick="stop()">STOP</button>
@@ -193,8 +198,8 @@ button { padding:10px; margin:5px; }
 <div id="alerts"></div>
 
 <script>
-function start(){ fetch('/start',{method:'POST'}) }
-function stop(){ fetch('/stop',{method:'POST'}) }
+function start(){fetch('/start',{method:'POST'})}
+function stop(){fetch('/stop',{method:'POST'})}
 
 setInterval(()=>{
  fetch('/status')
@@ -228,9 +233,8 @@ def home():
 
 @app.route("/start", methods=["POST"])
 def start():
-    if not state["running"]:
-        state["running"] = True
-        threading.Thread(target=bot_loop, daemon=True).start()
+    state["running"] = True
+    threading.Thread(target=bot_loop, daemon=True).start()
     return jsonify({"ok": True})
 
 @app.route("/stop", methods=["POST"])
