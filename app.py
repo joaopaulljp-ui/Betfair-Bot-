@@ -12,10 +12,20 @@ state = {
     "running": False,
     "games": [],
     "alerts": [],
-    "history": {}
+    "history": {},
+    "last_alerts": {}
 }
 
-def add_alert(msg):
+def add_alert(msg, key=None):
+    now = time.time()
+
+    # evita repetição
+    if key:
+        last = state["last_alerts"].get(key, 0)
+        if now - last < 60:
+            return
+        state["last_alerts"][key] = now
+
     print(msg)
     state["alerts"].insert(0, msg)
     if len(state["alerts"]) > 50:
@@ -36,22 +46,44 @@ def get_odds():
 # ARBITRAGEM
 # ------------------------
 def check_arbitrage(game):
-    best_odds = {}
+    best = {}
 
     for book in game.get("bookmakers", []):
+        book_name = book.get("title")
+
         for market in book.get("markets", []):
             for outcome in market.get("outcomes", []):
                 name = outcome["name"]
                 price = outcome["price"]
 
-                if name not in best_odds or price > best_odds[name]:
-                    best_odds[name] = price
+                if name not in best or price > best[name]["price"]:
+                    best[name] = {
+                        "price": price,
+                        "book": book_name
+                    }
 
-    if len(best_odds) >= 2:
-        inv = sum(1/o for o in best_odds.values())
+    if len(best) < 2:
+        return
 
-        if inv < 0.98:  # margem realista
-            add_alert(f"🚨 ARBITRAGEM REAL\n{game['home_team']} x {game['away_team']}")
+    inv = sum(1/v["price"] for v in best.values())
+
+    if inv < 0.98:
+        margem = (1 - inv) * 100
+
+        detalhes = "\n".join([
+            f"{k}: {v['price']} ({v['book']})"
+            for k, v in best.items()
+        ])
+
+        key = f"arb_{game['id']}"
+
+        add_alert(
+            f"🚨 ARBITRAGEM\n\n"
+            f"{game['home_team']} x {game['away_team']}\n\n"
+            f"{detalhes}\n\n"
+            f"Margem: {margem:.2f}%",
+            key
+        )
 
 # ------------------------
 # VARIAÇÃO DE ODDS
@@ -79,8 +111,13 @@ def detect_movement(game):
     change = ((avg_now - old) / old) * 100
 
     if abs(change) > 10:
+        key = f"mov_{game_id}"
+
         add_alert(
-            f"⚡ VARIAÇÃO FORTE\n{game['home_team']} x {game['away_team']}\n{change:.1f}%"
+            f"⚡ VARIAÇÃO FORTE\n\n"
+            f"{game['home_team']} x {game['away_team']}\n"
+            f"Variação: {change:.1f}%",
+            key
         )
 
     state["history"][game_id] = avg_now
@@ -106,7 +143,7 @@ HTML = """
 <h2>Bot de Alertas PRO</h2>
 <button onclick="start()">Start</button>
 <button onclick="stop()">Stop</button>
-<div id="alerts"></div>
+<div id="alerts" style="white-space: pre-line;"></div>
 
 <script>
 function start(){fetch('/start',{method:'POST'})}
@@ -114,7 +151,7 @@ function stop(){fetch('/stop',{method:'POST'})}
 
 setInterval(()=>{
  fetch('/status').then(r=>r.json()).then(d=>{
-  document.getElementById('alerts').innerHTML = d.alerts.join('<br><br>')
+  document.getElementById('alerts').innerHTML = d.alerts.join('\\n\\n-----------------------\\n\\n')
  })
 },2000)
 </script>
