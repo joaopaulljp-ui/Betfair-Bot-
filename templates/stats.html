@@ -3,24 +3,55 @@
 {% block title %}Estatísticas - Betfair Bot{% endblock %}
 
 {% block content %}
-<h2>📊 Estatísticas</h2>
+<h2>📊 Estatísticas Gerais</h2>
 
 <div class="row">
     <div class="col-md-3">
         <div class="card">
-            <div class="card-body">
-                <h4>{{ total_arbs }}</h4>
-                <p>Total de Arbitragens</p>
+            <div class="card-body text-center">
+                <h2 class="text-success">{{ total_arbs }}</h2>
+                <p>🚨 Arbitragens Detectadas</p>
             </div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="card">
-            <div class="card-body">
-                <h4>{{ total_alertas }}</h4>
-                <p>Total de Alertas</p>
+            <div class="card-body text-center">
+                <h2 class="text-info">{{ total_alertas }}</h2>
+                <p>🔔 Total de Alertas</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h2 class="text-warning">8</h2>
+                <p>🏢 Casas Monitoradas</p>
+                <small>Bet365, Betano, Sportingbet, Rivalo, 1xBet, Superbet, 7K, VaideBet</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h2 class="text-primary">6+</h2>
+                <p>⚽ Esportes Monitorados</p>
+                <small>Futebol, Basquete, Tennis, Beisebol, e mais...</small>
             </div>
         </div>
     </div>
 </div>
+
+<hr>
+
+<h3 class="mt-5">ℹ️ Informações do Sistema</h3>
+
+<div class="alert alert-info">
+    <strong>🤖 Status do Bot:</strong><br>
+    ✅ Monitorando em tempo real<br>
+    ✅ Apenas casas que operam no Brasil<br>
+    ✅ Links diretos para apostar<br>
+    ✅ Histórico completo de arbitragens<br>
+</div>
+
 {% endblock %}
