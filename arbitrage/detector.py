@@ -1,5 +1,5 @@
 from datetime import datetime
-from database import db, Alert, Arbitrage, Statistics
+from database import db, Alert, Arbitrage
 from arbitrage.calculator import OddsCalculator
 from config import Config
 
@@ -7,27 +7,26 @@ class ArbitrageDetector:
     MIN_MARGIN = -2.0
     
     @staticmethod
-    def gerar_link_aposta(casa, resultado, evento_id=None):
-        """Gera link direto para a aposta na casa"""
+    def gerar_link_aposta(casa):
         try:
             casa_lower = casa.lower()
             
             if "bet365" in casa_lower:
-                return f"{Config.BOOKMAKERS['bet365']['url_base']}/sports"
+                return Config.BOOKMAKERS['bet365']['url_base']
             elif "betano" in casa_lower:
-                return f"{Config.BOOKMAKERS['betano']['url_base']}"
+                return Config.BOOKMAKERS['betano']['url_base']
             elif "sportingbet" in casa_lower:
-                return f"{Config.BOOKMAKERS['sportingbet']['url_base']}"
+                return Config.BOOKMAKERS['sportingbet']['url_base']
             elif "rivalo" in casa_lower:
-                return f"{Config.BOOKMAKERS['rivalo']['url_base']}"
+                return Config.BOOKMAKERS['rivalo']['url_base']
             elif "1xbet" in casa_lower:
-                return f"{Config.BOOKMAKERS['1xbet']['url_base']}"
+                return Config.BOOKMAKERS['1xbet']['url_base']
             elif "superbet" in casa_lower:
-                return f"{Config.BOOKMAKERS['superbet']['url_base']}"
+                return Config.BOOKMAKERS['superbet']['url_base']
             elif "7kbet" in casa_lower or "7k" in casa_lower:
-                return f"{Config.BOOKMAKERS['7kbet']['url_base']}"
+                return Config.BOOKMAKERS['7kbet']['url_base']
             elif "vaidebet" in casa_lower or "vai de" in casa_lower:
-                return f"{Config.BOOKMAKERS['vaidebet']['url_base']}"
+                return Config.BOOKMAKERS['vaidebet']['url_base']
             
             return None
         except Exception as e:
@@ -36,7 +35,6 @@ class ArbitrageDetector:
     
     @staticmethod
     def filtrar_casas_brasil(bookmakers_list):
-        """Filtra apenas casas que operam no Brasil"""
         casas_brasil = []
         casas_config = Config.BOOKMAKERS
         
@@ -53,9 +51,7 @@ class ArbitrageDetector:
     
     @staticmethod
     def processar_jogo(game_data):
-        """Processa um jogo e detecta arbitragens (apenas casas Brasil)"""
         try:
-            game_id = game_data.get('id')
             home = game_data.get('home_team', 'Time A')
             away = game_data.get('away_team', 'Time B')
             sport_key = game_data.get('sport_key', 'soccer')
@@ -81,7 +77,7 @@ class ArbitrageDetector:
                     for outcome in market.get('outcomes', []):
                         resultado = outcome.get('name', '')
                         odd = float(outcome.get('price', 0))
-                        link = ArbitrageDetector.gerar_link_aposta(casa, resultado)
+                        link = ArbitrageDetector.gerar_link_aposta(casa)
                         
                         if resultado not in outcomes_dict:
                             outcomes_dict[resultado] = {}
@@ -105,8 +101,9 @@ class ArbitrageDetector:
                 return None
             
             odds_list = [info[1]['odd'] for info in melhores.values()]
+            odds_set = {info[1]['odd'] for info in melhores.values()}
             
-            margem = OddsCalculator.calcular_margem({info[1]['odd'] for info in melhores.values()})
+            margem = OddsCalculator.calcular_margem(odds_set)
             
             if margem is None or margem >= ArbitrageDetector.MIN_MARGIN:
                 return None
@@ -115,7 +112,11 @@ class ArbitrageDetector:
             
             melhores_items = list(melhores.items())
             resultado1_nome, (casa1, info1) = melhores_items[0]
-            resultado2_nome, (casa2, info2) = melhores_items[1] if len(melhores_items) > 1 else (None, (None, None))
+            
+            if len(melhores_items) > 1:
+                resultado2_nome, (casa2, info2) = melhores_items[1]
+            else:
+                resultado2_nome, casa2, info2 = None, None, {'odd': 0, 'link': None}
             
             msg = f"""
 🚨 ARBITRAGEM DETECTADA!
@@ -140,7 +141,7 @@ class ArbitrageDetector:
                 casa2=casa2,
                 resultado2=resultado2_nome,
                 odd2=info2['odd'],
-                link2=info2['link'],
+                link2=info2.get('link'),
                 margem=abs(margem),
                 lucro_potencial=lucro
             )
@@ -161,7 +162,7 @@ class ArbitrageDetector:
                 casa2=casa2,
                 resultado2=resultado2_nome,
                 odd2=info2['odd'],
-                link2=info2['link']
+                link2=info2.get('link')
             )
             db.session.add(alert)
             db.session.commit()
@@ -172,7 +173,7 @@ class ArbitrageDetector:
                 'margem': abs(margem),
                 'lucro': lucro,
                 'link1': info1['link'],
-                'link2': info2['link']
+                'link2': info2.get('link')
             }
         
         except Exception as e:
