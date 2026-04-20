@@ -1,8 +1,3 @@
-"""
-BOT PRO — Arbitragem & Value Bets — Casas BR
-Betano · Superbet · Sportingbet · KTO · Novibet
-"""
-
 import os
 import requests
 import time
@@ -12,55 +7,44 @@ from flask import Flask, jsonify, render_template_string
 
 app = Flask(__name__)
 
-# ========================
+# =========================
 # CONFIG
-# ========================
+# =========================
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
 BANKROLL = float(os.environ.get("BANKROLL", "200"))
 
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-VALUE_THRESH = float(os.environ.get("VALUE_THRESHOLD", "5"))
-ARB_MIN = float(os.environ.get("ARB_MIN_MARGIN", "0.3"))
-
-# Casas BR
-BR_BOOKS = ["Betano", "Superbet", "Sportingbet", "KTO", "Novibet"]
-
 state = {
     "running": False,
     "alerts": [],
     "stats": {"arb": 0, "value": 0, "card": 0},
-    "last_scan": "—",
     "scan_count": 0,
+    "last_scan": "—",
     "games_live": 0,
     "last_alerts": {}
 }
 
-# ========================
+# =========================
 # TELEGRAM
-# ========================
+# =========================
 def send_telegram(msg):
     if not TG_TOKEN or not TG_CHAT:
-        print("Telegram não configurado")
         return
 
     try:
         requests.post(
             f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-            json={"chat_id": TG_CHAT, "text": msg, "parse_mode": "HTML"},
+            json={"chat_id": TG_CHAT, "text": msg},
             timeout=6
         )
-    except Exception as e:
-        print("Telegram error:", e)
+    except:
+        pass
 
-
-def tg_test():
-    send_telegram("🤖 BOT PRO ONLINE\nConexão OK")
-
-# ========================
-# ALERTAS
-# ========================
+# =========================
+# ALERTS
+# =========================
 def add_alert(tipo, msg, key=None):
     now = time.time()
 
@@ -76,12 +60,12 @@ def add_alert(tipo, msg, key=None):
         "time": datetime.datetime.now().strftime("%H:%M:%S")
     })
 
-    state["stats"][tipo] = state["stats"].get(tipo, 0) + 1
+    state["stats"][tipo] += 1
     send_telegram(msg)
 
-# ========================
-# API ODDS
-# ========================
+# =========================
+# ODDS API
+# =========================
 def get_games():
     if not ODDS_API_KEY:
         return []
@@ -93,74 +77,45 @@ def get_games():
     except:
         return []
 
-# ========================
-# ODDS BR
-# ========================
-def extract_br_odds(game):
-    result = {}
-
-    for book in game.get("bookmakers", []):
-        name = book.get("title", "")
-
-        if not any(b.lower() in name.lower() for b in BR_BOOKS):
-            continue
-
-        for market in book.get("markets", []):
-            if market.get("key") != "h2h":
-                continue
-
-            for outcome in market.get("outcomes", []):
-                o = outcome["name"]
-                p = float(outcome["price"])
-
-                if o not in result:
-                    result[o] = {}
-
-                result[o][name] = p
-
-    return result
-
-# ========================
-# ARBITRAGEM
-# ========================
+# =========================
+# ARBITRAGEM SIMPLES
+# =========================
 def check_arbitrage(game):
-    br = extract_br_odds(game)
-    if len(br) < 2:
-        return
-
     best = {}
 
-    for outcome, books in br.items():
-        if books:
-            b = max(books, key=books.get)
-            best[outcome] = books[b]
+    for book in game.get("bookmakers", []):
+        for market in book.get("markets", []):
+            for outcome in market.get("outcomes", []):
+                name = outcome["name"]
+                price = float(outcome["price"])
 
-    odds = list(best.values())
+                if name not in best or price > best[name]["price"]:
+                    best[name] = {"price": price, "book": book["title"]}
+
+    if len(best) < 2:
+        return
+
+    odds = [v["price"] for v in best.values()]
     inv = sum(1 / o for o in odds)
 
     if inv >= 1:
         return
 
     margin = (1 - inv) * 100
-    if margin < ARB_MIN:
-        return
-
-    stakes = [(BANKROLL / o) / inv for o in odds]
-    profit = min(s * o for s, o in zip(stakes, odds)) - sum(stakes)
 
     msg = (
         f"🚨 ARBITRAGEM\n"
         f"{game.get('home_team')} x {game.get('away_team')}\n"
-        f"Lucro: R${profit:.2f} | Margem: {margin:.2f}%"
+        f"Margem: {margin:.2f}%"
     )
 
     add_alert("arb", msg, key=f"arb_{game.get('id')}")
 
-# ========================
+# =========================
 # LOOP
-# ========================
+# =========================
 def bot_loop():
-    tg_test()
+    send_telegram("🤖 BOT ONLINE")
 
     while state["running"]:
         games = get_games()
@@ -172,14 +127,76 @@ def bot_loop():
         for g in games:
             check_arbitrage(g)
 
-        time.sleep(12)
+        time.sleep(10)
 
-# ========================
-# API
-# ========================
+# =========================
+# FRONTEND COMPLETO
+# =========================
+HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BOT PRO</title>
+<style>
+body { font-family: Arial; background:#0f1115; color:white; text-align:center; }
+button { padding:10px 20px; margin:10px; cursor:pointer; }
+.card { background:#1c1f26; padding:10px; margin:10px; border-radius:10px; }
+</style>
+</head>
+
+<body>
+
+<h1>⚡ BOT PRO ARBITRAGEM</h1>
+
+<button onclick="start()">START</button>
+<button onclick="stop()">STOP</button>
+
+<p id="status">Status: —</p>
+
+<h3>Alertas</h3>
+<div id="alerts"></div>
+
+<script>
+function start(){
+  fetch('/start',{method:'POST'})
+}
+
+function stop(){
+  fetch('/stop',{method:'POST'})
+}
+
+setInterval(()=>{
+  fetch('/status')
+  .then(r=>r.json())
+  .then(d=>{
+    document.getElementById('status').innerText =
+      "Rodando: " + d.running + " | Jogos: " + d.games_live
+
+    let html = ""
+    d.alerts.forEach(a=>{
+      html += `<div class="card">
+        <b>${a.tipo.toUpperCase()}</b><br>
+        ${a.msg}<br>
+        <small>${a.time}</small>
+      </div>`
+    })
+
+    document.getElementById('alerts').innerHTML = html
+  })
+},2000)
+</script>
+
+</body>
+</html>
+"""
+
+# =========================
+# ROUTES
+# =========================
 @app.route("/")
 def home():
-    return "<h2>BOT PRO RODANDO</h2>"
+    return render_template_string(HTML)
 
 @app.route("/start", methods=["POST"])
 def start():
@@ -197,10 +214,9 @@ def stop():
 def status():
     return jsonify(state)
 
-# ========================
+# =========================
 # START
-# ========================
+# =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print("Bot iniciado")
     app.run(host="0.0.0.0", port=port)
