@@ -1,9 +1,9 @@
-“””
+"""
 ╔══════════════════════════════════════════════════════════╗
 ║     BETFAIR DELAY BOT — Versão Railway / iPhone         ║
 ║     Interface web integrada — acesse pelo Safari        ║
 ╚══════════════════════════════════════════════════════════╝
-“””
+"""
 
 import os
 import json
