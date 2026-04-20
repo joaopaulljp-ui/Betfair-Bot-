@@ -1,9 +1,9 @@
-import  os
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-class  Config:
+class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-change-in-production")
     DEBUG = False
     SQLALCHEMY_DATABASE_URI = "sqlite:///betfair_bot.db"
@@ -15,7 +15,6 @@ class  Config:
     SCRAPER_TIMEOUT = 30
     MIN_MARGIN = 2.0
     
-    # ✅ APENAS CASAS QUE OPERAM NO BRASIL
     BOOKMAKERS = {
         "bet365": {
             "nome": "Bet365",
@@ -59,7 +58,6 @@ class  Config:
         }
     }
     
-    # ✅ ESPORTES INTERNACIONAIS (todos disponíveis)
     SPORTS = {
         "soccer": "Futebol",
         "basketball": "Basquete",
