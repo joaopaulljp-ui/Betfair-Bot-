@@ -10,7 +10,6 @@ class ArbitrageDetector:
     def gerar_link_aposta(casa, resultado, evento_id=None):
         """Gera link direto para a aposta na casa"""
         try:
-            # Mapeia a casa de apostas
             casa_lower = casa.lower()
             
             if "bet365" in casa_lower:
@@ -32,7 +31,7 @@ class ArbitrageDetector:
             
             return None
         except Exception as e:
-            print(f"Erro ao gerar link:  {e}")
+            print(f"Erro ao gerar link: {e}")
             return None
     
     @staticmethod
@@ -44,7 +43,6 @@ class ArbitrageDetector:
         for bookmaker in bookmakers_list:
             casa = bookmaker.get('title', '').lower()
             
-            # Verifica se é uma casa que opera no Brasil
             for chave, info in casas_config.items():
                 if chave in casa or info['nome'].lower() in casa:
                     if info['operando_brasil']:
@@ -62,9 +60,8 @@ class ArbitrageDetector:
             away = game_data.get('away_team', 'Time B')
             sport_key = game_data.get('sport_key', 'soccer')
             league_title = game_data.get('league_title', 'Liga')
-              nome_jogo =   f"{home} x {away}"
+            nome_jogo = f"{home} x {away}"
             
-            # ✅ FILTRA APENAS CASAS DO BRASIL
             bookmakers = ArbitrageDetector.filtrar_casas_brasil(
                 game_data.get('bookmakers', [])
             )
@@ -72,8 +69,7 @@ class ArbitrageDetector:
             if len(bookmakers) < 2:
                 return None
             
-            # Coleta odds por resultado
-            outcomes_dict = {}  # {resultado: {casa: (odd, link)}}
+            outcomes_dict = {}
             
             for bookmaker in bookmakers:
                 casa = bookmaker.get('title', 'Desconhecida')
@@ -83,7 +79,7 @@ class ArbitrageDetector:
                         continue
                     
                     for outcome in market.get('outcomes', []):
-                         resultado = outcome. get('name', '')
+                        resultado = outcome.get('name', '')
                         odd = float(outcome.get('price', 0))
                         link = ArbitrageDetector.gerar_link_aposta(casa, resultado)
                         
@@ -99,75 +95,71 @@ class ArbitrageDetector:
             if len(outcomes_dict) < 2:
                 return None
             
-            # Encontra melhor odd para cada resultado
-               melhores =    {}
-            for   outcome, casas   in outcomes_dict.items():
+            melhores = {}
+            for outcome, casas in outcomes_dict.items():
                 if casas:
-                      melhor_casa =   max(casas.items(), key=lambda x: x[1]['odd'])
-                      melhores  [outcome]   = melhor_casa 
+                    melhor_casa = max(casas.items(), key=lambda x: x[1]['odd'])
+                    melhores[outcome] = melhor_casa
             
             if len(melhores) < 2:
                 return None
             
-            odds_list = [info[1]['odd'] for info in   melhores. values()]
+            odds_list = [info[1]['odd'] for info in melhores.values()]
             
-            margem = OddsCalculator.calcular_margem({info[1]['odd'] for info in   melhores. values()})
+            margem = OddsCalculator.calcular_margem({info[1]['odd'] for info in melhores.values()})
             
-            if    margem    is None or    margem >= ArbitrageDetector.  MIN_MARGIN:
+            if margem is None or margem >= ArbitrageDetector.MIN_MARGIN:
                 return None
             
             lucro = OddsCalculator.calcular_lucro_potencial(200, odds_list)
             
-            # ✅ PEGA OS 2 MELHORES RESULTADOS
-                melhores_items =     list(melhores.items())
-                resultado1_nome,     (casa1, info1)    = melhores_items  [0]
-                resultado2_nome,     (casa2, info2)    = melhores_items  [1] if len(melhores_items) > 1 else (None, (None, None))
+            melhores_items = list(melhores.items())
+            resultado1_nome, (casa1, info1) = melhores_items[0]
+            resultado2_nome, (casa2, info2) = melhores_items[1] if len(melhores_items) > 1 else (None, (None, None))
             
             msg = f"""
 🚨 ARBITRAGEM DETECTADA!
 📊 {nome_jogo}
 🏆 {league_title}
- 📈 Margem:   {margem:.2f}%
-   💰 Lucro potencial: R$     {lucro:.2f}
+📈 Margem: {margem:.2f}%
+💰 Lucro potencial: R$ {lucro:.2f}
 
 🏢 Casas do Brasil:
-✅ {casa1}: {info1['odd']}     em     {resultado1_nome}
-✅ {casa2}: {info2['odd']}     em     {resultado2_nome}
+✅ {casa1}: {info1['odd']} em {resultado1_nome}
+✅ {casa2}: {info2['odd']} em {resultado2_nome}
 """
             
-            # Salva no banco
             arb = Arbitrage(
-                    esporte=sport_key,    
-                    jogo=nome_jogo,    
+                esporte=sport_key,
+                jogo=nome_jogo,
                 liga=league_title,
                 casa1=casa1,
-                    resultado1=resultado1_nome,    
+                resultado1=resultado1_nome,
                 odd1=info1['odd'],
                 link1=info1['link'],
                 casa2=casa2,
-                    resultado2=resultado2_nome,    
+                resultado2=resultado2_nome,
                 odd2=info2['odd'],
                 link2=info2['link'],
-                     margem=    abs(margem), abs(margem),
+                margem=abs(margem),
                 lucro_potencial=lucro
             )
             db.session.add(arb)
             
-             # Cria alerta # Cria alerta
             alert = Alert(
-                     tipo=     'arb',
-                     esporte=sport_key,     
+                tipo='arb',
+                esporte=sport_key,
                 liga=league_title,
-                     mensagem=msg,     
-                     jogo=nome_jogo,     
-                      margem=     abs(margem), abs(margem),
+                mensagem=msg,
+                jogo=nome_jogo,
+                margem=abs(margem),
                 lucro_potencial=lucro,
                 casa1=casa1,
-                     resultado1=resultado1_nome,     
+                resultado1=resultado1_nome,
                 odd1=info1['odd'],
                 link1=info1['link'],
                 casa2=casa2,
-                     resultado2=resultado2_nome,     
+                resultado2=resultado2_nome,
                 odd2=info2['odd'],
                 link2=info2['link']
             )
@@ -176,7 +168,7 @@ class ArbitrageDetector:
             
             return {
                 'tipo': 'arb',
-                 'mensagem': msg, 'mensagem': msg,
+                'mensagem': msg,
                 'margem': abs(margem),
                 'lucro': lucro,
                 'link1': info1['link'],
@@ -184,5 +176,5 @@ class ArbitrageDetector:
             }
         
         except Exception as e:
-             print(    f"Erro ao processar jogo:      {e}") print(    f"Erro ao processar jogo:      {e}")
+            print(f"Erro ao processar jogo: {e}")
             return None
