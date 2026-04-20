@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Alertas - Betfair Bot{% endblock %}
+
+{% block content %}
+<h2>🔔 Todos os Alertas</h2>
+
+<div class="table-responsive">
+    <table class="table table-dark table-hover">
+        <thead>
+            <tr>
+                <th>Tipo</th>
+                <th>Jogo</th>
+                <th>Margem</th>
+                <th>Mensagem</th>
+                <th>Data</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for alerta in alertas %}
+            <tr>
+                <td><span class="badge bg-success">{{ alerta.tipo.upper() }}</span></td>
+                <td>{{ alerta.jogo }}</td>
+                <td>{{ "%.2f"|format(alerta.margem or 0) }}%</td>
+                <td>{{ alerta.mensagem[:50] }}...</td>
+                <td>{{ alerta.data_criacao.strftime("%d/%m/%Y %H:%M") }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
