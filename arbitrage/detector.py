@@ -4,7 +4,7 @@ from arbitrage.calculator import OddsCalculator
 from config import Config
 
 class ArbitrageDetector:
-    MIN_MARGIN = -2.0
+    MIN_MARGIN = 0
     
     @staticmethod
     def gerar_link_aposta(casa):
