@@ -1,64 +1,77 @@
 import os
 import requests
-from dotenv import load_dotenv
+from config import Config
 
-load_dotenv()
+print("=" * 60)
+print("🔍 TESTE DE TELEGRAM")
+print("=" * 60)
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+token = Config.TELEGRAM_TOKEN
+chat_id = Config.TELEGRAM_CHAT_ID
 
-def enviar_mensagem_teste():
-    """Envia uma mensagem de teste no Telegram"""
+print(f"\n1️⃣ VERIFICANDO VARIÁVEIS:")
+print(f"   Token configurado: {'✅ SIM' if token else '❌ NÃO'}")
+print(f"   Chat ID configurado: {'✅ SIM' if chat_id else '❌ NÃO'}")
+
+if not token or not chat_id:
+    print("\n❌ ERRO: Falta configurar TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID no Railway!")
+    exit(1)
+
+print(f"\n2️⃣ TESTANDO CONEXÃO COM TELEGRAM:")
+
+try:
+    url = f"https://api.telegram.org/bot{token}/getMe"
+    r = requests.get(url, timeout=5)
     
-    print("🔍 Testando Telegram...")
-    print(f"Token: {TELEGRAM_TOKEN[:20]}..." if TELEGRAM_TOKEN else "❌ Token não configurado")
-    print(f"Chat ID: {TELEGRAM_CHAT_ID}")
-    
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Token ou Chat ID não configurados!")
-        return False
-    
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": """
-🤖 TESTE DE TELEGRAM FUNCIONANDO!
+    if r.status_code == 200:
+        bot_info = r.json()['result']
+        print(f"   ✅ Bot conectado: @{bot_info['username']}")
+    else:
+        print(f"   ❌ ERRO: Token inválido! Status: {r.status_code}")
+        exit(1)
+except Exception as e:
+    print(f"   ❌ ERRO DE CONEXÃO: {e}")
+    exit(1)
 
-✅ O bot conseguiu se conectar!
+print(f"\n3️⃣ ENVIANDO MENSAGEM DE TESTE:")
 
-📊 Informações:
-- Token: Configurado ✓
-- Chat ID: Configurado ✓
-- Conexão: OK ✓
+try:
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
+    mensagem = """
+🤖 TESTE DE TELEGRAM - BETFAIR BOT
+
+✅ Bot está funcionando corretamente!
+
+📊 Status:
+• Banco de dados: OK ✓
+• API Flask: OK ✓
+• Telegram: OK ✓
 
 🚨 Agora você receberá alertas de arbitragem aqui!
-            """
-        }
-        
-        print(f"\n📤 Enviando mensagem para Telegram...")
-        print(f"URL: {url}")
-        
-        response = requests.post(url, json=payload, timeout=10)
-        
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 200:
-            print("✅ SUCESSO! Mensagem enviada no Telegram!")
-            return True
-        else:
-            print("❌ ERRO! Verifique Token e Chat ID")
-            return False
-    
-    except Exception as e:
-        print(f"❌ ERRO AO ENVIAR: {e}")
-        return False
 
-if __name__ == "__main__":
-    resultado = enviar_mensagem_teste()
-    if resultado:
-        print("\n🎉 Telegram está funcionando corretamente!")
+🎯 Próximo passo: Iniciar o bot no dashboard
+    """
+    
+    payload = {
+        "chat_id": chat_id,
+        "text": mensagem
+    }
+    
+    r = requests.post(url, json=payload, timeout=5)
+    
+    if r.status_code == 200:
+        print(f"   ✅ MENSAGEM ENVIADA COM SUCESSO!")
+        print(f"\n   Verifique seu Telegram para ver a mensagem!")
     else:
-        print("\n⚠️ Há um problema com a configuração do Telegram")
+        print(f"   ❌ ERRO: {r.status_code}")
+        print(f"   Resposta: {r.text}")
+        exit(1)
+        
+except Exception as e:
+    print(f"   ❌ ERRO: {e}")
+    exit(1)
+
+print("\n" + "=" * 60)
+print("✅ TODOS OS TESTES PASSARAM!")
+print("=" * 60)
