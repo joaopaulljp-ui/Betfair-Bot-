@@ -52,7 +52,7 @@ def get_games_api():
             url = f"https://api.the-odds-api.com/v4/sports/{esporte}/odds/"
             params = {
                 "apiKey": Config.ODDS_API_KEY,
-                "regions": "br",
+                "regions": "us",
                 "markets": "h2h"
             }
             
