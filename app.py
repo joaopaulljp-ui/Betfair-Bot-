@@ -31,6 +31,7 @@ with app.app_context():
     print("✅ Banco de dados inicializado!")
 
 def get_games_api():
+    """Obtém jogos de TODOS os esportes internacionais"""
     if not Config.ODDS_API_KEY:
         print("❌ SEM API KEY")
         return []
@@ -55,20 +56,37 @@ def get_games_api():
                 "markets": "h2h"
             }
             
+            print(f"🔍 Buscando {esporte}...")
+            print(f"   URL: {url}")
+            
             r = requests.get(url, params=params, timeout=10)
+            
+            print(f"   Status: {r.status_code}")
+            
             if r.status_code == 200:
                 data = r.json()
+                
+                print(f"   Data type: {type(data)}")
                 
                 if isinstance(data, list):
                     todos_jogos.extend(data)
                     print(f"✅ {esporte}: {len(data)} jogos")
-                elif isinstance(data, dict) and "data" in data:
-                    todos_jogos.extend(data["data"])
-                    print(f"✅ {esporte}: {len(data['data'])} jogos")
+                elif isinstance(data, dict):
+                    if "data" in data:
+                        todos_jogos.extend(data["data"])
+                        print(f"✅ {esporte}: {len(data['data'])} jogos")
+                    else:
+                        print(f"⚠️ {esporte}: Resposta inesperada")
+                        print(f"   Keys: {list(data.keys())}")
+                        print(f"   Sample: {str(data)[:200]}")
+            else:
+                print(f"❌ {esporte}: Erro {r.status_code}")
+                print(f"   Response: {r.text[:500]}")
         
         except Exception as e:
-            print(f"⚠️ Erro ao buscar {esporte}: {e}")
+            print(f"❌ {esporte}: Exception {type(e).__name__}: {e}")
     
+    print(f"\n📊 TOTAL: {len(todos_jogos)} jogos coletados")
     return todos_jogos
 
 def bot_loop():
