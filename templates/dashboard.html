@@ -47,3 +47,53 @@
     </div>
 </div>
 {% endblock %}
+{% block scripts %}
+<script>
+async function atualizarDashboard() {
+    try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        document.getElementById('status-text').innerHTML =
+            data.running ? 'Status: ✅ RODANDO' : 'Status: ⛔ PARADO';
+
+        document.getElementById('stat-arb').innerText =
+            data.arbitragens || 0;
+
+        document.getElementById('stat-alertas').innerText =
+            data.alertas_hoje || 0;
+
+        const alerts = document.getElementById('alerts-container');
+
+        if (data.alertas && data.alertas.length > 0) {
+            alerts.innerHTML = data.alertas.map(a => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <strong>${a.esporte || 'Alerta'}</strong><br>
+                        ${a.mensagem || ''}
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            alerts.innerHTML = '<p class="text-muted">Nenhum alerta ainda.</p>';
+        }
+
+    } catch (err) {
+        console.log(err);
+    }
+}
+
+async function iniciarBot() {
+    await fetch('/api/start', { method: 'POST' });
+    setTimeout(atualizarDashboard, 1000);
+}
+
+async function pararBot() {
+    await fetch('/api/stop', { method: 'POST' });
+    setTimeout(atualizarDashboard, 1000);
+}
+
+setInterval(atualizarDashboard, 3000);
+atualizarDashboard();
+</script>
+{% endblock %}
