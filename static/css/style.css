@@ -123,3 +123,29 @@ h4 {
         font-size: 0.75rem;
     }
 }
+.card,
+.card-body,
+p,
+h4,
+h2,
+span,
+div {
+    color: #ffffff !important;
+}
+
+.text-muted {
+    color: #cccccc !important;
+}
+
+#stat-arb,
+#stat-alertas {
+    color: #00ff99 !important;
+    font-size: 32px;
+    font-weight: bold;
+}
+
+#status-text {
+    color: #ffffff !important;
+    font-size: 20px;
+    font-weight: bold;
+}
